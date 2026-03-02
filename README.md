@@ -213,20 +213,6 @@ The core function is `determine_one_generation_defensive()` in `reconciliation/r
 
 ---
 
-## Evaluation
-
-Grading is handled by `grader.py`, which executes candidate SQL against SQLite databases and compares results using one of three methods:
-
-| Method | Use case |
-|---|---|
-| `multiset` (default) | Standard set-based execution accuracy |
-| `subset,>=,N` | Top-*k* questions ("list any two...") |
-| `list` | Order-sensitive questions |
-
-The grading method per question is stored in the `reward_spec.method` field of each data record.
-
----
-
 ## Reproducing Paper Results
 
 ### Table 4 — BIRD benchmarks (Arcwise-Plat-SQL, Arcwise-Plat-Full)
