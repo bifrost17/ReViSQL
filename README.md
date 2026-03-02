@@ -53,7 +53,6 @@ ReViSQL/
 │   └── generate_spider2sqlite_tables.py      # tables.json generation for Spider 2-SQLite
 │
 ├── tinker_cookbook/               # Bundled training framework (RLVR engine, SQL env, evaluators)
-├── grader.py                      # SQL execution grader (multiset / subset / list grading)
 ├── pyproject.toml                 # Project dependencies
 └── .gitignore
 ```
