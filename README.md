@@ -67,14 +67,13 @@ ReViSQL/
 # Install ReViSQL and dependencies
 uv sync
 
-# Copy .env and fill in API keys (Together AI for inference, W&B for logging)
+# Copy .env and fill in API keys (Anthropic for reconciliation, W&B for logging)
 cp .env.example .env
 ```
 
 **Required environment variables** (in `.env`):
 ```
-TOGETHER_API_KEY=...      # For reconciliation LLM calls (Qwen3-235B via Together AI)
-GROQ_API_KEY=...          # Optional: alternative provider for reconciliation
+ANTHROPIC_API_KEY=...     # For reconciliation LLM calls (Claude Opus 4.6 via Anthropic API)
 WANDB_API_KEY=...         # For training/eval logging
 ```
 
@@ -190,13 +189,13 @@ uv run scripts/infer.py \
     repeat=129
 ```
 
-Inference-time reconciliation (the `Decide()` step in Algorithm 1) is performed by `reconciliation/reconciliation.py` using a pre-RLVR base model (Qwen3-235B via Together AI). Set `TOGETHER_API_KEY` in your `.env` before running.
+Inference-time reconciliation (the `Decide()` step in Algorithm 1) is performed by `reconciliation/reconciliation.py` using Claude Opus 4.6 via the Anthropic API. Set `ANTHROPIC_API_KEY` in your `.env` before running.
 
 ---
 
 ## Reconciliation Module
 
-The `reconciliation/` module implements the inference-time constraint filtering described in §5.2. It uses an LLM to judge whether a set of SQL candidates correctly covers the constraints in the question and external knowledge hint.
+The `reconciliation/` module implements the inference-time constraint filtering described in §5.2. It uses Claude Opus 4.6 (Anthropic API) to judge whether a set of SQL candidates correctly covers the constraints in the question and external knowledge hint.
 
 **Standalone batch reconciliation** (for post-hoc analysis on graded results):
 ```bash
@@ -205,7 +204,7 @@ uv run run_reconciliation.py \
     --graded_result_path ../graded_results/my_run \
     --output_path decisions.jsonl \
     --data_file ../data/arcwise_plat_sql.json \
-    --model_name Qwen/Qwen3-235B-A22B-Instruct-2507-tput
+    --model_name claude-opus-4-6
 ```
 
 The core function is `determine_one_generation_defensive()` in `reconciliation/reconciliation.py`, which corresponds to `Decide(M, x, G[j])` in Algorithm 1.

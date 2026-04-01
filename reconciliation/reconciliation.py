@@ -1,6 +1,7 @@
-from together import Together
-from groq import Groq
+from anthropic import Anthropic
 import re
+
+DEFAULT_MODEL = "claude-opus-4-6"
 
 reconciliation_template = """You are an expert SQL query reviewer. Given a natural language question, an external knowledge hint, and a set of SQL queries (which all share the same execution result), your task is to determine whether the SQL query set answers the question correctly and covers the provided hint comprehensively.
 
@@ -18,7 +19,7 @@ The provided hint will include following type of information. For each type, the
 1. Computation formulas:
     - Example hint 1: percentage refers to DIVIDE(COUNT(student_id where type = 'TPG' and first_name = 'Ogdon', last_name = 'Zywicki'), COUNT(first_name = 'Ogdon', last_name = 'Zywicki')) * 100
     - Example correct SQL: SELECT CAST(SUM(CASE WHEN T3.type = 'TPG' THEN 1 ELSE 0 END) AS REAL) * 100 / COUNT(T1.student_id) FROM RA AS T1 INNER JOIN prof AS T2 ON T1.prof_id = T2.prof_id INNER JOIN student AS T3 ON T1.student_id = T3.student_id WHERE T2.first_name = 'Ogdon' AND T2.last_name = 'Zywicki'
-    - Example incorrect SQL: SELECT CAST(SUM(CASE WHEN T3.type = 'TPG' THEN 1 ELSE 0 END) AS REAL) * 100 / CAST(SUM(CASE WHEN T2.first_name = 'Ogdon' AND T2.last_name = 'Zywicki' THEN 1 ELSE 0 END) AS REAL) FROM RA AS T1 INNER JOIN prof AS T2 ON T1.prof_id = T2.prof_id INNER JOIN student AS T3 ON T1.student_id = T3.student_id 
+    - Example incorrect SQL: SELECT CAST(SUM(CASE WHEN T3.type = 'TPG' THEN 1 ELSE 0 END) AS REAL) * 100 / CAST(SUM(CASE WHEN T2.first_name = 'Ogdon' AND T2.last_name = 'Zywicki' THEN 1 ELSE 0 END) AS REAL) FROM RA AS T1 INNER JOIN prof AS T2 ON T1.prof_id = T2.prof_id INNER JOIN student AS T3 ON T1.student_id = T3.student_id
     - Example hint 2: percentage = DIVIDE(count(SalesOrderID(OrderQty<3 & UnitPriceDiscount = 0)), count(SalesOrderID))*100%
     - Example correct SQL: WITH total_orders AS (SELECT DISTINCT `SalesOrderID` FROM `SalesOrderDetail`), qual_orders AS ( SELECT DISTINCT `SalesOrderID` FROM `SalesOrderDetail` WHERE `OrderQty` <= 3 AND `UnitPriceDiscount` = 0) SELECT 100.0 * (SELECT COUNT(*) FROM qual_orders) / NULLIF((SELECT COUNT(*) FROM total_orders),0) AS percentage;
     - Example incorrect SQL: SELECT CAST(SUM(CASE WHEN OrderQty < 3 AND UnitPriceDiscount = 0 THEN 1 ELSE 0 END) AS REAL) * 100 / COUNT(SalesOrderID) FROM SalesOrderDetail
@@ -63,29 +64,15 @@ Requirement:
 **SQL Query set:**
 {sql_query}"""
 
-def run_together_model(prompt: str, model_name: str, temperature: float=0.0, max_tokens: int=512) -> str:
-    client = Together()
-    response = client.chat.completions.create(
+def run_anthropic_model(prompt: str, model_name: str = DEFAULT_MODEL, temperature: float = 0.0, max_tokens: int = 512) -> str:
+    client = Anthropic()
+    response = client.messages.create(
         model=model_name,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=max_tokens,
         temperature=temperature,
     )
-    return response.choices[0].message.content
-
-def run_groq_model(prompt: str, model_name: str, temperature: float=0.0, max_tokens: int=512) -> str:
-    client = Groq()
-    response = client.chat.completions.create(
-        model=model_name,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=max_tokens,
-        temperature=temperature,
-    )
-    return response.choices[0].message.content
-
-def parse_qwen_response(response: str) -> str:
-    response = response.split('</think>')[-1]
-    return response.strip()
+    return response.content[0].text
 
 def determine_one_generation(question, evidence, sql):
     from prompt import query_reconciliation_template
@@ -94,23 +81,17 @@ def determine_one_generation(question, evidence, sql):
         hint=evidence,
         sql_query=sql
     )
-    response = run_together_model(prompt, model_name="Qwen/Qwen3-235B-A22B-Instruct-2507-tput", temperature=0.0, max_tokens=1024)
-    # if response.strip() not in ["Correct", "Incorrect", "Unsure"]:
-    #     print(f"Warning: Unexpected response from model: {response}")
-    return parse_qwen_response(response)
+    response = run_anthropic_model(prompt, max_tokens=1024)
+    return response.strip()
 
-def determine_one_generation_defensive(question, evidence: str="", sql: str="", model_name="Qwen/Qwen3-235B-A22B-Instruct-2507-tput"):
+def determine_one_generation_defensive(question, evidence: str="", sql: str="", model_name=DEFAULT_MODEL):
     assert sql != "", "SQL query cannot be empty."
     prompt = reconciliation_template.format(
         question=question,
         hint=evidence,
         sql_query=sql
     )
-    
-    if model_name == "Qwen/Qwen3-235B-A22B-Instruct-2507-tput":
-        response = run_together_model(prompt, model_name=model_name, temperature=0.0, max_tokens=4096)
-    elif model_name == "moonshotai/kimi-k2-instruct-0905":
-        response = run_groq_model(prompt, model_name=model_name, temperature=0.0, max_tokens=4096) 
+    response = run_anthropic_model(prompt, model_name=model_name, max_tokens=4096)
     matches = re.findall(r'<answer>(.*?)</answer>', response, re.DOTALL)
     if matches:
         return matches[-1].strip(), response, prompt
@@ -123,13 +104,10 @@ def determine_one_generation_detailed(question, evidence, sql):
         hint=evidence,
         sql_query=sql
     )
-    response = run_together_model(prompt, model_name="Qwen/Qwen3-235B-A22B-Thinking-2507", temperature=0.0, max_tokens=4096)
-    # parse all <answer>Correct</answer> in response
+    response = run_anthropic_model(prompt, max_tokens=4096)
     matches = re.findall(r'<answer>(.*?)</answer>', response, re.DOTALL)
     if matches:
         return matches[-1].strip(), response
-    # if response.strip() not in ["Correct", "Incorrect", "Unsure"]:
-    #     print(f"Warning: Unexpected response from model: {response}")
     return "Unsure", response
 
 def determine_one_generation_detailed_flexible(question, evidence, sql):
@@ -139,13 +117,10 @@ def determine_one_generation_detailed_flexible(question, evidence, sql):
         hint=evidence,
         sql_query=sql
     )
-    response = run_together_model(prompt, model_name="Qwen/Qwen3-235B-A22B-Thinking-2507", temperature=0.0, max_tokens=4096)
-    # parse all <answer>Correct</answer> in response
+    response = run_anthropic_model(prompt, max_tokens=4096)
     matches = re.findall(r'<answer>(.*?)</answer>', response, re.DOTALL)
     if matches:
         return matches[-1].strip(), response
-    # if response.strip() not in ["Correct", "Incorrect", "Unsure"]:
-    #     print(f"Warning: Unexpected response from model: {response}")
     return "Unsure", response
 
 def determine_one_set_of_generations(question, evidence, sql_list):
@@ -156,17 +131,15 @@ def determine_one_set_of_generations(question, evidence, sql_list):
         hint=evidence,
         sql_queries=sql_queries_formatted
     )
-    response = run_together_model(prompt, model_name="Qwen/Qwen3-235B-A22B-fp8-tput", temperature=0.0, max_tokens=1024)
-    # if response.strip() not in ["Correct", "Incorrect", "Unsure"]:
-    #     print(f"Warning: Unexpected response from model: {response}")
-    return parse_qwen_response(response)
+    response = run_anthropic_model(prompt, max_tokens=1024)
+    return response.strip()
 
 if __name__ == "__main__":
     question = "Among the Artifact cards, which are black color and comes with foreign languague translation?"
     hint = "Artifact card refers to originalType = 'Artifact'; black color refers to colors = 'B'; foreign language refers to language in foreign_data"
     sql_query = """SELECT DISTINCT c.name
-FROM cards c JOIN foreign_data f 
-  ON c.uuid = f.uuid 
+FROM cards c JOIN foreign_data f
+  ON c.uuid = f.uuid
 WHERE c.originalType LIKE '%Artifact%' AND c.colors LIKE '%B%';"""
-    result = determine_one_generation(question, hint, sql_query)
+    result, response, prompt = determine_one_generation_defensive(question, hint, sql_query)
     print(f"Model determination: {result}")

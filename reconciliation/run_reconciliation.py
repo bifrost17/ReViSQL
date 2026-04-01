@@ -20,7 +20,7 @@ parser.add_argument("--graded_result_path", type=str, required=True, help="Path 
 parser.add_argument("--output_path", type=str, required=True, help="Path to save the model decisions jsonl file.")
 parser.add_argument("--max_retries", type=int, default=3, help="Maximum number of retries for model decision.")
 parser.add_argument("--dry_run", action="store_true", help="If set, the script will only print the questions and candidates without making model calls.")
-parser.add_argument("--model_name", type=str, default="Qwen/Qwen3-235B-A22B-Instruct-2507-tput", help="Model name to use for evaluation.")
+parser.add_argument("--model_name", type=str, default="claude-opus-4-6", help="Model name to use for evaluation.")
 parser.add_argument("--include_all_errors", action="store_true", help="If set, the script will include all error cases instead of just those without any correct generations.")
 parser.add_argument("--data_file", type=str, default="./data/arcwise_full_augmented.json", help="Path to the input data file containing questions and evidence.")
 args = parser.parse_args()
